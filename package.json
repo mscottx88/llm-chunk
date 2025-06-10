@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "private": true,
+  "version": "0.0.0",
+  "main": "src/utils/chunker.ts",
+  "type": "module",
+  "files": [
+    "src/utils/chunker.ts"
+  ],
+  "exports": {
+    ".": "./src/utils/chunker.ts"
+  },
+  "scripts": {
+    "test": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "3.2.3",
+    "tsx": "^4.19.4",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.3"
+  }
+}
