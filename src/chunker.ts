@@ -15,7 +15,7 @@ export interface SplitOptions {
    * Optional chunking strategy: 'sentence' or 'paragraph'.
    * If set, overrides character-based chunking. Default: 'paragraph'.
    */
-  chunkStrategy?: 'sentence' | 'paragraph';
+  chunkStrategy?: "sentence" | "paragraph";
 }
 
 export interface Chunk {
@@ -36,17 +36,29 @@ export interface Chunk {
  */
 export function split(
   text: string | string[],
+  options: SplitOptions = {},
+): Chunk[] {
+  return Array.from(iterateChunks(text, options));
+}
+
+/**
+ * Synchronous generator version of split. Yields each chunk object as produced.
+ * @param text - A string or array of strings to split.
+ * @param options - Options object.
+ * @yields Chunk object for each chunk.
+ */
+export function* iterateChunks(
+  text: string | string[],
   {
     chunkSize = 512,
     chunkOverlap = 0,
     lengthFunction,
-    chunkStrategy
-  }: SplitOptions = {}
-): Chunk[] {
-  const chunks: Chunk[] = [];
-  function getUnits(text: string, strategy: 'sentence' | 'paragraph') {
-    const units: { unit: string, start: number, end: number }[] = [];
-    if (strategy === 'paragraph') {
+    chunkStrategy,
+  }: SplitOptions = {},
+): Generator<Chunk> {
+  function getUnits(text: string, strategy: "sentence" | "paragraph") {
+    const units: { unit: string; start: number; end: number }[] = [];
+    if (strategy === "paragraph") {
       const regex = /\n{2,}/g;
       let lastIndex = 0;
       let match;
@@ -57,13 +69,15 @@ export function split(
         lastIndex = regex.lastIndex;
       }
       const lastUnit = text.slice(lastIndex).trim();
-      if (lastUnit) units.push({ unit: lastUnit, start: lastIndex, end: text.length });
+      if (lastUnit)
+        units.push({ unit: lastUnit, start: lastIndex, end: text.length });
     } else {
       const regex = /[^.!?]+[.!?]+(?:\s+|$)/g;
       let match;
       while ((match = regex.exec(text)) !== null) {
         const unit = match[0].trim();
-        if (unit) units.push({ unit, start: match.index, end: regex.lastIndex });
+        if (unit)
+          units.push({ unit, start: match.index, end: regex.lastIndex });
       }
     }
     return units;
@@ -74,29 +88,46 @@ export function split(
   for (let textIdx = 0; textIdx < texts.length; textIdx++) {
     const currentText = texts[textIdx];
     if (currentText.length === 0) {
-      chunks.push({ chunk: "", startIndex: 0, startPosition: 0, endIndex: 0, endPosition: 0 });
+      yield {
+        chunk: "",
+        startIndex: 0,
+        startPosition: 0,
+        endIndex: 0,
+        endPosition: 0,
+      };
       globalCharOffset += currentText.length;
       continue;
     }
     if (chunkStrategy) {
-      const unitsRaw = Array.isArray(text) && text !== texts
-        ? (text as string[]).map(u => ({ unit: u, start: 0, end: u.length }))
-        : getUnits(currentText, chunkStrategy);
-      const getLength = lengthFunction ? lengthFunction : (t: string) => t.length;
-      const joiner = chunkStrategy === 'paragraph' ? '\n\n' : ' ';
+      const unitsRaw =
+        Array.isArray(text) && text !== texts
+          ? (text as string[]).map((u) => ({
+              unit: u,
+              start: 0,
+              end: u.length,
+            }))
+          : getUnits(currentText, chunkStrategy);
+      const getLength = lengthFunction
+        ? lengthFunction
+        : (t: string) => t.length;
+      const joiner = chunkStrategy === "paragraph" ? "\n\n" : " ";
       const joinerLen = getLength(joiner);
-      const allUnitsFit = unitsRaw.every(u => getLength(u.unit) <= chunkSize) &&
-        unitsRaw.reduce((acc, u, i) => acc + getLength(u.unit) + (i > 0 ? joinerLen : 0), 0) <= chunkSize;
+      const allUnitsFit =
+        unitsRaw.every((u) => getLength(u.unit) <= chunkSize) &&
+        unitsRaw.reduce(
+          (acc, u, i) => acc + getLength(u.unit) + (i > 0 ? joinerLen : 0),
+          0,
+        ) <= chunkSize;
       if (allUnitsFit) {
         for (let i = 0; i < unitsRaw.length; i++) {
           const u = unitsRaw[i];
-          chunks.push({
+          yield {
             chunk: u.unit,
             startIndex: i,
             startPosition: u.start,
             endIndex: i,
-            endPosition: u.end
-          });
+            endPosition: u.end,
+          };
         }
         globalCharOffset += currentText.length;
         continue;
@@ -124,14 +155,14 @@ export function split(
           first = false;
           j++;
         }
-        const chunkStr = chunkUnits.map(u => u.unit).join(joiner);
+        const chunkStr = chunkUnits.map((u) => u.unit).join(joiner);
         if (chunkStr && chunkStr !== lastChunk) {
           tempChunks.push({
             chunk: chunkStr,
             startIndex: i,
             startPosition: chunkUnits[0].start,
             endIndex: j - 1,
-            endPosition: chunkUnits[chunkUnits.length - 1].end
+            endPosition: chunkUnits[chunkUnits.length - 1].end,
           });
           lastChunk = chunkStr;
         }
@@ -145,11 +176,12 @@ export function split(
         tempChunks.length > 1 &&
         tempChunks[tempChunks.length - 1] &&
         tempChunks[tempChunks.length - 2] &&
-        tempChunks[tempChunks.length - 2].chunk.endsWith(tempChunks[tempChunks.length - 1].chunk)
-      ) {
+        tempChunks[tempChunks.length - 2].chunk.endsWith(
+          tempChunks[tempChunks.length - 1].chunk,
+        )
+      )
         tempChunks.pop();
-      }
-      chunks.push(...tempChunks);
+      for (const c of tempChunks) yield c;
       globalCharOffset += currentText.length;
       continue;
     }
@@ -167,13 +199,13 @@ export function split(
       }
       if (end === start) end = Math.min(start + 1, currentText.length);
       const chunkStr = currentText.slice(start, end);
-      chunks.push({
+      yield {
         chunk: chunkStr,
         startIndex: start,
         startPosition: start,
         endIndex: end - 1,
-        endPosition: end
-      });
+        endPosition: end,
+      };
       if (end >= currentText.length) break;
       if (chunkOverlap > 0 && end > start) {
         start = Math.max(end - chunkOverlap, start + 1);
@@ -183,5 +215,22 @@ export function split(
     }
     globalCharOffset += currentText.length;
   }
-  return chunks;
+}
+
+/**
+ * Returns the substring from the input text(s) between start and end character positions (character-based only).
+ * @param text - A string or array of strings.
+ * @param start - Optional start character position (inclusive, default 0).
+ * @param end - Optional end character position (exclusive, default: end of input).
+ * @returns The substring between start and end positions.
+ */
+export function getChunk(
+  text: string | string[],
+  start?: number,
+  end?: number,
+): string {
+  const input = Array.isArray(text) ? text.join("") : text;
+  const s = start ?? 0;
+  const e = end ?? input.length;
+  return input.slice(s, e);
 }
